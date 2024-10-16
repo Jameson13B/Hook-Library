@@ -13,6 +13,10 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
+  "peerDependencies": {
+    "@types/firebase": "^3.2.1",
+    "firebase": "^10.14.1"
+  },
   "devDependencies": {
     "@eslint/js": "^9.11.1",
     "@types/react": "^18.3.10",

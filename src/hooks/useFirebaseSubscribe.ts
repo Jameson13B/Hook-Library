@@ -1,49 +1,108 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react"
+import {
+  doc,
+  onSnapshot,
+  Firestore,
+  DocumentData,
+  updateDoc,
+} from "firebase/firestore"
 
 /**
- * A custom hook for subscribing to Firebase Firestore data.
+ * useFirebaseSubscribe Hook
  *
- * @param firebase - The Firebase instance.
- * @param path - The Firestore collection path to subscribe to.
- * @returns An object containing:
- *   - isLoading: A boolean indicating if the data is currently being fetched.
- *   - isError: A boolean indicating if an error occurred during fetching.
- *   - data: The fetched data from Firestore, or null if not yet loaded.
- *   - onRefresh: A function to manually trigger a refresh of the data.
+ * This hook subscribes to a single document in Firebase Firestore.
+ * It provides real-time updates of the document data and a method to update the document.
+ *
+ * @param {Firestore} db - The Firestore database instance
+ * @param {string} path - The Firestore collection path
+ * @param {string} id - The document ID within the collection
+ *
+ * @returns {Object} An object containing the following properties and methods:
+ *   - data: The current document data (DocumentData | null)
+ *   - isLoading: A boolean indicating whether the data is being loaded
+ *   - isError: A boolean indicating whether an error occurred
+ *   - error: The error object if an error occurred, otherwise null
+ *   - updateDocument: A function to update the document with new data
+ *   - isUpdating: A boolean indicating whether an update operation is in progress
  *
  * @example
- * const { isLoading, isError, data, onRefresh } = useFirebaseSubscribe(firebase, 'users');
+ * const { data, isLoading, isError, error, updateDocument, isUpdating } = useFirebaseSubscribe(db, 'users', 'user123');
+ *
+ * if (isLoading) {
+ *   return <div>Loading...</div>;
+ * }
+ *
+ * if (isError) {
+ *   return <div>Error loading data: {error?.message}</div>;
+ * }
+ *
+ * if (data) {
+ *   console.log(data.name);
+ *   
+ *   // Update the document
+ *   updateDocument({ name: 'New Name' });
+ * }
+ *
+ * if (isUpdating) {
+ *   return <div>Updating document...</div>;
+ * }
  */
-export const useFirebaseSubscribe = (firebase: any, path: string) => {
-  const [data, setData] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isError, setIsError] = useState(false)
-  const [onRefresh, setOnRefresh] = useState(false)
+export const useFirebaseSubscribe = (
+  db: Firestore,
+  path: string,
+  id: string
+) => {
+  const [data, setData] = useState<DocumentData | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isError, setIsError] = useState<boolean>(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [isUpdating, setIsUpdating] = useState<boolean>(false)
 
   useEffect(() => {
-    const unsubscribe = firebase
-      .firestore()
-      .collection(path)
-      .onSnapshot((snapshot: any) => {
-        if (snapshot.isError) {
-          setIsError(true)
+    const docRef = doc(db, path, id)
+    const unsubscribe = onSnapshot(
+      docRef,
+      (doc) => {
+        if (doc.exists()) {
+          setData(doc.data())
         } else {
-          setData({ ...snapshot.docs[0], id: snapshot.id })
-          setIsError(false)
+          setData(null)
         }
+        setIsError(false)
+        setError(null)
         setIsLoading(false)
-      })
+      },
+      (error) => {
+        console.error("Error fetching document:", error)
+        setIsError(true)
+        setIsLoading(false)
+        setError(error)
+      }
+    )
+
     return () => unsubscribe()
-  }, [firebase, path, onRefresh])
+  }, [db, path, id])
+
+  const updateDocument = async (updateData: Partial<DocumentData>) => {
+    if (!data) return
+    setIsUpdating(true)
+    try {
+      const docRef = doc(db, path, id)
+      await updateDoc(docRef, updateData)
+    } catch (error) {
+      console.error("Error updating document:", error)
+      setIsError(true)
+      setError(error as Error)
+    }
+    setIsUpdating(false)
+  }
 
   return {
+    data,
     isLoading,
     isError,
-    data,
-    onRefresh: () => {
-      setIsLoading(true)
-      setOnRefresh(!onRefresh)
-    },
+    error,
+    updateDocument,
+    isUpdating,
   }
 }
